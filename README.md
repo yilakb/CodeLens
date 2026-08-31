@@ -74,7 +74,7 @@ The prompt requests an audit report only and ends with `STOP`. It never authoriz
 - High-reasoning engineering claim decomposition
 - Dynamically generated onboarding and investigation prompts
 - One-click copy controls for each result
-- Local run history with reload support
+- Local run history with reload and confirmed removal support
 - Downloadable JSON output
 - Explicit transcript, analysis, validation, and storage errors
 - No database, authentication system, queue, background service, or repository connection
@@ -187,7 +187,7 @@ Every successful result is written atomically to:
 data/runs/<run-id>.json
 ```
 
-The page lists the 50 most recent saved runs. Select a run to reload its transcript, claims, and prompts, or use **Download JSON** to create a portable browser download.
+The page lists the 50 most recent saved runs. Select a run to reload its transcript, claims, and prompts, or use **Download JSON** to create a portable browser download. Select **Remove** and confirm the warning to permanently delete only that run's local JSON file. If the deleted run is currently open, its displayed output is cleared.
 
 Set `RUNS_DIR` to another local directory if you want saved runs stored elsewhere.
 
@@ -280,7 +280,7 @@ The generated prompts can be copied into a separate repository-aware agent. Any 
 | --- | --- | --- |
 | `/api/process` | `POST` | Process `{ "url": "..." }` or `{ "transcript": "..." }`, save the result, and return it |
 | `/api/runs` | `GET` | List recent saved runs |
-| `/api/runs/:runId` | `GET` | Load one saved run |
+| `/api/runs/:runId` | `GET`, `DELETE` | Load one saved run or permanently delete its local JSON file |
 
 The app is designed for trusted local use and does not include authentication or rate limiting. Do not expose it directly to an untrusted network without adding appropriate protections.
 
@@ -299,7 +299,7 @@ lib/
   types.ts              Zod schemas and TypeScript output types
   video-url.ts          Video URL validation and host allowlist
 tests/                  Unit tests
-data/runs/              Local generated results; ignored by Git
+data/runs/              Generated results that can be committed and shared
 ```
 
 ## Development commands
@@ -357,7 +357,7 @@ Confirm that the process completed successfully and that the application can wri
 ## Privacy and security
 
 - `.env.local` is ignored by Git and must never be committed.
-- `data/runs` is ignored because transcripts and generated audits may contain sensitive information.
+- `data/runs` is tracked so selected transcripts and generated audits can be shared through the repository. Review every run before committing because it may contain source URLs, transcript content, or sensitive engineering details.
 - Saved JSON is local but not encrypted.
 - Video or transcript content sent through OpenAI is subject to the applicable OpenAI API data terms.
 - Third-party transcript services have their own privacy and retention policies.

@@ -10,6 +10,7 @@ import {
   buildPromptGenerationInput,
   PROMPT_GENERATION_INSTRUCTIONS,
 } from "./prompts";
+import { formatTechnicalClaim } from "./claim-language";
 
 export const CLAIMS_INSTRUCTIONS = `You are a senior software architect extracting testable engineering claims from a video transcript for a later repository audit.
 
@@ -24,6 +25,7 @@ Your output must be faithful to the speaker while being more useful than a trans
 - Include only implications grounded in the transcript's reasoning. Do not add a broad checklist of security, performance, or reliability concerns merely because they might be relevant.
 - Name technologies and patterns precisely, but do not invent versions, architecture, metrics, or repository facts.
 - Treat the recommendation as a hypothesis for later testing. Never strengthen, repair, or silently generalize it. If no solution is offered, say so explicitly in recommendedSolution.
+- Use neutral report wording in technicalClaims. Start every technicalClaims item with "Claim:" and never begin it with "The speaker claims," "The speaker states," or similar attribution; the source attribution is already implied by the field.
 - Make every field self-contained, concise, non-duplicative, and technically precise.`;
 
 type ReasoningEffort = "low" | "medium" | "high";
@@ -64,7 +66,11 @@ export async function extractClaims(transcript: string): Promise<Claims> {
   if (!response.output_parsed) {
     throw new Error("The analysis model did not return valid structured claims.");
   }
-  return ClaimsSchema.parse(response.output_parsed);
+  const claims = ClaimsSchema.parse(response.output_parsed);
+  return {
+    ...claims,
+    technicalClaims: claims.technicalClaims.map(formatTechnicalClaim),
+  };
 }
 
 export async function generateAuditPrompts(claims: Claims): Promise<GeneratedPrompts> {

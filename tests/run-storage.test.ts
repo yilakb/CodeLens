@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { listRuns, loadRun, saveRun } from "../lib/run-storage";
+import { deleteRun, listRuns, loadRun, saveRun } from "../lib/run-storage";
 import type { AuditOutput } from "../lib/types";
 
 let testDirectory: string | undefined;
@@ -52,5 +52,25 @@ describe("local JSON run storage", () => {
     testDirectory = await mkdtemp(join(tmpdir(), "audit-scout-storage-"));
     process.env.RUNS_DIR = testDirectory;
     await expect(loadRun("../.env.local")).rejects.toThrow(/invalid run/i);
+    await expect(deleteRun("../.env.local")).rejects.toThrow(/invalid run/i);
+  });
+
+  it("deletes only the selected saved run", async () => {
+    testDirectory = await mkdtemp(join(tmpdir(), "audit-scout-storage-"));
+    process.env.RUNS_DIR = testDirectory;
+
+    const first = await saveRun(output);
+    const second = await saveRun({
+      ...output,
+      claims: { ...output.claims, topic: "API performance" },
+    });
+
+    await deleteRun(first.runId);
+
+    await expect(loadRun(first.runId)).rejects.toThrow();
+    await expect(loadRun(second.runId)).resolves.toEqual(second);
+    await expect(listRuns()).resolves.toEqual([
+      expect.objectContaining({ runId: second.runId, topic: "API performance" }),
+    ]);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { formatTechnicalClaim } from "@/lib/claim-language";
 import type { Claims, ProcessError, ProcessResult, RunSummary } from "@/lib/types";
 
 function CopyButton({ value }: { value: string }) {
@@ -49,7 +50,7 @@ function OutputSection({
 
 function claimsAsText(claims: Claims) {
   const list = (items: string[]) => items.map((item) => `- ${item}`).join("\n") || "- None stated";
-  return `TOPIC\n${claims.topic}\n\nPROBLEM\n${claims.problem}\n\nTECHNICAL CLAIMS\n${list(claims.technicalClaims)}\n\nRECOMMENDED SOLUTION\n${claims.recommendedSolution}\n\nREASONING\n${list(claims.reasoning)}\n\nASSUMPTIONS / PRECONDITIONS\n${list(claims.assumptions)}\n\nTECHNOLOGIES / PATTERNS MENTIONED\n${list(claims.technologiesAndPatterns)}\n\nIMPLICATIONS\n${list(claims.implications.map((item) => `${item.category}: ${item.detail}`))}\n\nUNCERTAINTIES\n${list(claims.uncertainties)}`;
+  return `TOPIC\n${claims.topic}\n\nPROBLEM\n${claims.problem}\n\nTECHNICAL CLAIMS\n${list(claims.technicalClaims.map(formatTechnicalClaim))}\n\nRECOMMENDED SOLUTION\n${claims.recommendedSolution}\n\nREASONING\n${list(claims.reasoning)}\n\nASSUMPTIONS / PRECONDITIONS\n${list(claims.assumptions)}\n\nTECHNOLOGIES / PATTERNS MENTIONED\n${list(claims.technologiesAndPatterns)}\n\nIMPLICATIONS\n${list(claims.implications.map((item) => `${item.category}: ${item.detail}`))}\n\nUNCERTAINTIES\n${list(claims.uncertainties)}`;
 }
 
 function ClaimList({ items }: { items: string[] }) {
@@ -65,7 +66,7 @@ function ClaimsView({ claims }: { claims: Claims }) {
     <div className="claims-grid">
       <div className="claim-block claim-wide"><h3>Topic</h3><p>{claims.topic}</p></div>
       <div className="claim-block claim-wide"><h3>Problem</h3><p>{claims.problem}</p></div>
-      <div className="claim-block"><h3>Technical claims</h3><ClaimList items={claims.technicalClaims} /></div>
+      <div className="claim-block"><h3>Technical claims</h3><ClaimList items={claims.technicalClaims.map(formatTechnicalClaim)} /></div>
       <div className="claim-block"><h3>Recommended solution</h3><p>{claims.recommendedSolution}</p></div>
       <div className="claim-block"><h3>Reasoning</h3><ClaimList items={claims.reasoning} /></div>
       <div className="claim-block"><h3>Assumptions / preconditions</h3><ClaimList items={claims.assumptions} /></div>
@@ -85,6 +86,7 @@ export default function Home() {
   const [loadingMode, setLoadingMode] = useState<"video" | "transcript">("video");
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -141,7 +143,7 @@ export default function Home() {
   }
 
   async function loadSavedRun(runId: string) {
-    if (loading) return;
+    if (loading || deletingRunId) return;
     setLoading(true);
     setError(null);
     try {
@@ -162,6 +164,44 @@ export default function Home() {
       setError({ code: "RUN_LOAD_FAILED", stage: "storage", message: "The saved run could not be loaded." });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteSavedRun(run: RunSummary) {
+    if (loading || deletingRunId) return;
+    const confirmed = window.confirm(
+      `Delete this saved run permanently?\n\n${run.topic}\n${new Date(run.createdAt).toLocaleString()}\n\nThis removes its local JSON file and cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingRunId(run.runId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.runId)}`, {
+        method: "DELETE",
+      });
+      const body = (await response.json()) as
+        | { deletedRunId: string }
+        | { error: { message: string } };
+      if (!response.ok || "error" in body) {
+        setError({
+          code: "RUN_DELETE_FAILED",
+          stage: "storage",
+          message: "error" in body ? body.error.message : "The saved run could not be deleted.",
+        });
+        return;
+      }
+
+      setRuns((current) => current.filter((item) => item.runId !== run.runId));
+      setResult((current) => (current?.runId === run.runId ? null : current));
+    } catch {
+      setError({
+        code: "RUN_DELETE_FAILED",
+        stage: "storage",
+        message: "The app could not delete the saved run. Please try again.",
+      });
+    } finally {
+      setDeletingRunId(null);
     }
   }
 
@@ -281,19 +321,32 @@ export default function Home() {
           ) : (
             <div className="run-list">
               {runs.map((run) => (
-                <button
+                <div
                   className={`run-row ${result?.runId === run.runId ? "active" : ""}`}
-                  type="button"
                   key={run.runId}
-                  onClick={() => void loadSavedRun(run.runId)}
-                  disabled={loading}
                 >
-                  <span className="run-topic">{run.topic}</span>
-                  <span className="run-meta">
-                    {new Date(run.createdAt).toLocaleString()} · {run.transcriptSource}
-                  </span>
-                  <span className="run-action">Load →</span>
-                </button>
+                  <button
+                    className="run-load"
+                    type="button"
+                    onClick={() => void loadSavedRun(run.runId)}
+                    disabled={loading || deletingRunId !== null}
+                  >
+                    <span className="run-topic">{run.topic}</span>
+                    <span className="run-meta">
+                      {new Date(run.createdAt).toLocaleString()} · {run.transcriptSource}
+                    </span>
+                    <span className="run-action">Load →</span>
+                  </button>
+                  <button
+                    className="run-delete"
+                    type="button"
+                    onClick={() => void deleteSavedRun(run)}
+                    disabled={loading || deletingRunId !== null}
+                    aria-label={`Delete saved run: ${run.topic}`}
+                  >
+                    {deletingRunId === run.runId ? "Removing…" : "Remove"}
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -313,7 +366,7 @@ export default function Home() {
         {error ? (
           <section className="error-panel" role="alert">
             <span className="error-mark">!</span>
-            <div><strong>{error.stage === "transcript" ? "Transcript unavailable" : error.stage === "validation" ? "Check the URL" : "Analysis failed"}</strong><p>{error.message}</p></div>
+            <div><strong>{error.stage === "transcript" ? "Transcript unavailable" : error.stage === "validation" ? "Check the URL" : error.stage === "storage" ? "Saved run error" : "Analysis failed"}</strong><p>{error.message}</p></div>
           </section>
         ) : null}
 

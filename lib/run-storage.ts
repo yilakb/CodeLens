@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import {
@@ -59,6 +59,10 @@ export async function saveRun(
 export async function loadRun(runId: string): Promise<ProcessResult> {
   const content = await readFile(runPath(runId), "utf8");
   return StoredRunSchema.parse(JSON.parse(content));
+}
+
+export async function deleteRun(runId: string): Promise<void> {
+  await unlink(runPath(runId));
 }
 
 export async function listRuns(limit = 50): Promise<RunSummary[]> {
