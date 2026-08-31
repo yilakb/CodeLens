@@ -27,6 +27,7 @@ Local JSON history and human review
 ```
 
 ## What CodeLens produces
+<img width="1068" height="917" alt="image" src="https://github.com/user-attachments/assets/a5acf0fa-800e-4e23-895e-e6d0497f9162" />
 
 ### Structured claims
 
